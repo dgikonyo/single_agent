@@ -1,0 +1,49 @@
+services:  
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: agent_api_dev
+    environment:
+      POSTGRES_USER: root_user
+      POSTGRES_PASSWORD: root_secret
+      POSTGRES_DB: bank_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema:/docker-entrypoint-initdb.d # Optional: auto-run schema on start
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root_user -d agent_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend-api:
+    container_name: agent_api_dev
+    build:
+      context: .
+      target: dev
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_HOST: postgres_db
+      DATABASE_PORT: 5432
+      DATABASE_USER: root_user
+      DATABASE_PASSWORD: root_secret
+      DATABASE_NAME: agent_db
+    # --- The Dependency ---
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

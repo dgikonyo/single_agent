@@ -1,0 +1,41 @@
+# --- Binaries and Build Artifacts ---
+# The main binary produced by 'go build'
+main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# --- Air (Live Reload) ---
+# Air stores the temporary running binary in /tmp by default
+/src/tmp/
+/tmp/
+.air.toml
+
+# --- Testing and Coverage ---
+*.test
+*.out
+coverage.txt
+
+# --- Environment and Secrets ---
+# NEVER commit your actual secrets
+.env
+.env.local
+.env.*.local
+
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+
+# --- IDEs and Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Docker & Database ---
+# Ignore the local postgres data if you ever mount it to a local folder
+# instead of a named volume.
+postgres_data/
+*.log
