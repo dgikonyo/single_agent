@@ -1,49 +1,53 @@
-services:  
+services:
   postgres_db:
     image: postgres:15-alpine
-    container_name: agent_api_dev
+    container_name: agent_db_dev
     environment:
       POSTGRES_USER: root_user
       POSTGRES_PASSWORD: root_secret
-      POSTGRES_DB: bank_db
+      POSTGRES_DB: agent_db
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./sql/schema:/docker-entrypoint-initdb.d # Optional: auto-run schema on start
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root_user -d media_db"]
+      interval: 5s
+      retries: 5
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U root_user -d agent_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   backend-api:
     container_name: agent_api_dev
-    build:
-      context: .
-      target: dev
-    ports:
-      - "8080:8080"
+    build: ./backend
+    user: "root"
     environment:
       DATABASE_HOST: postgres_db
       DATABASE_PORT: 5432
       DATABASE_USER: root_user
       DATABASE_PASSWORD: root_secret
       DATABASE_NAME: agent_db
-    # --- The Dependency ---
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
     depends_on:
       postgres_db:
         condition: service_healthy
+    networks:
+      - app-network
+
+  frontend:
+    container_name: media_frontend_dev
+    build: ./frontend
+    user: "root"
+    ports:
+      - "5173:5173"
     volumes:
-      - .:/app
+      - ./frontend:/app
+      - /app/node_modules
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  postgres_data:
