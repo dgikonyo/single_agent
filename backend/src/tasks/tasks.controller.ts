@@ -43,7 +43,7 @@ export class TasksController {
         try {
             switch (action) {
                 case 'create':
-                    const newTask = this.taskService.create(interpretation.data.title);
+                    const newTask = this.taskService.create(interpretation.data?.title);
                     result = { performed: 'create', task: newTask };
                     break;
                 case 'read':
@@ -51,14 +51,14 @@ export class TasksController {
                     break;
                 case 'update':
                     const updated = this.taskService.update(
-                        interpretation.data.id,
-                        interpretation.data.title,
+                        interpretation.data?.id,
+                        interpretation.data?.title,
                     );
                     result = updated ? { performed: 'update', task: updated } : { error: 'Task not found' };
                     break;
                 case 'delete':
-                    const deleted = this.taskService.remove(interpretation.data.id);
-                    result = deleted ? { performed: 'delete', id: interpretation.data.id } : { error: 'Task not found' };
+                    const deleted = this.taskService.remove(interpretation.data?.id);
+                    result = deleted ? { performed: 'delete', id: interpretation.data?.id } : { error: 'Task not found' };
                     break;
                 default:
                     result = {
