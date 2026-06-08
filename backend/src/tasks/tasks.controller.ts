@@ -6,8 +6,7 @@ import { Task } from "./entity/tasks.entity";
 @Controller('tasks')
 export class TasksController {
     constructor(private readonly taskService: TasksService,
-        private readonly hfService: HuggingFaceService,
-    ) { }
+        private readonly hfService: HuggingFaceService, ) { }
 
     @Post()
     createManually(@Body('title') title: string): Task {
@@ -35,42 +34,93 @@ export class TasksController {
     related to task management using a natural language processing (NLP) service provided by
     `HuggingFaceService`. Here's a breakdown of what the method does: */
     @Post('agent')
-    async agentCommand(@Body('command') command: string): Promise<any> {
-        const interpretation = await this.hfService.interpretCommand(command);
-        let result: any = {};
-        const action = interpretation.action;
+    async agentCommand(@Body('command') command: string) {
+        if (!command?.trim()) {
+            return {
+                error: 'Command is required',
+            };
+        }
+
+        const interpretation =
+            await this.hfService.interpretCommand(command);
+
+        const { action, data } = interpretation;
+
+        let result: any;
 
         try {
             switch (action) {
-                case 'create':
-                    const newTask = this.taskService.create(interpretation.data?.title);
-                    result = { performed: 'create', task: newTask };
+                case 'create': {
+                    if (!data?.title) {
+                        throw new Error('Missing title');
+                    }
+
+                    const task = await this.taskService.create(data.title);
+
+                    result = {
+                        performed: 'create',
+                        task,
+                    };
+
                     break;
-                case 'read':
-                    result = { performed: 'read', tasks: this.taskService.findAll() };
+                }
+
+                case 'read': {
+                    const tasks = await this.taskService.findAll();
+
+                    result = {
+                        performed: 'read',
+                        tasks,
+                    };
+
                     break;
-                case 'update':
-                    const updated = this.taskService.update(
-                        interpretation.data?.id,
-                        interpretation.data?.title,
+                }
+
+                case 'update': {
+                    if (!data?.id || !data?.title) {
+                        throw new Error('Missing id or title');
+                    }
+
+                    const task = await this.taskService.update(
+                        Number(data.id),
+                        data.title,
                     );
-                    result = updated ? { performed: 'update', task: updated } : { error: 'Task not found' };
+
+                    result = task ? { performed: 'update', task, } : { error: 'Task not found', };
+
                     break;
-                case 'delete':
-                    const deleted = this.taskService.remove(interpretation.data?.id);
-                    result = deleted ? { performed: 'delete', id: interpretation.data?.id } : { error: 'Task not found' };
+                }
+
+                case 'delete': {
+                    if (!data?.id) {
+                        throw new Error('Missing id');
+                    }
+
+                    const deleted = await this.taskService.remove(
+                        Number(data.id),
+                    );
+
+                    result = deleted
+                        ? { performed: 'delete', id: Number(data.id), } : { error: 'Task not found', };
+
                     break;
+                }
+
                 default:
                     result = {
-                        error: 'Could not understand command. Try examples like "add a task buy milk".'
-                    }
+                        error: 'Could not understand command. Example: "add a task buy milk"',
+                    };
             }
-        } catch { result = { error: 'Failed to execute command.' }; }
+        } catch (error: any) {
+            result = {
+                error: error.message || 'Failed to execute command',
+            };
+        }
 
         return {
             command,
             interpretation,
-            result
-        }
+            result,
+        };
     }
 }

@@ -26,19 +26,23 @@ export class HuggingFaceService {
 
     constructor(private readonly configService: ConfigService) {
         const token = this.configService.get<string>('HF_TOKEN');
+        const model = this.configService.get<string>('HF_MODEL');
 
         if (!token) {
             throw new Error('HF_TOKEN is missing');
         }
 
-        const endpoint = this.configService.get<string>('HF_ENDPOINT') || 'https://router.huggingface.co/v1';
+        if (!model) {
+            throw new Error('HF_MODEL is missing');
+        }
 
-        this.client = new InferenceClient(token, { endpointUrl: endpoint, });
-        this.model = this.configService.get<string>('HF_MODEL') || 'Qwen/Qwen2.5-7B-Instruct';
+        this.client = new InferenceClient(token);
+        this.model = model;
+
+        this.logger.log(`Using HF model: ${this.model}`);
     }
 
-    async interpretCommand(command: string,): Promise<AgentResponse> {
-        this.logger.log(this.healthCheck());
+    async interpretCommand(command: string): Promise<AgentResponse> {
         try {
             const response = await this.client.chatCompletion({
                 model: this.model,
@@ -56,14 +60,15 @@ export class HuggingFaceService {
                 ],
             });
 
-            const content = response.choices?.[0]?.message?.content ?? '';
+            const content =
+                response.choices?.[0]?.message?.content?.trim() ?? '';
+
+            this.logger.debug(`Model response: ${content}`);
 
             const json = this.extractJson(content);
 
             if (!json) {
-                this.logger.warn(
-                    `Could not extract JSON from model response: ${content}`,
-                );
+                this.logger.warn(`Failed to parse JSON: ${content}`);
 
                 return {
                     action: 'unknown',
@@ -75,9 +80,7 @@ export class HuggingFaceService {
 
             if (!parsed.success) {
                 this.logger.warn(
-                    `Invalid model response schema: ${JSON.stringify(
-                        parsed.error.flatten(),
-                    )}`,
+                    JSON.stringify(parsed.error.flatten(), null, 2),
                 );
 
                 return {
@@ -87,11 +90,15 @@ export class HuggingFaceService {
             }
 
             return parsed.data;
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(
-                'Hugging Face inference failed',
-                error instanceof Error ? error.stack : String(error),
+                'HF inference failed',
+                error?.stack || String(error),
             );
+
+            console.error('Status:', error?.httpResponse?.status);
+            console.error('Body:', error?.httpResponse?.body);
+            console.error('Message:', error?.message);
 
             return {
                 action: 'unknown',
@@ -104,81 +111,40 @@ export class HuggingFaceService {
         return `
             You are a task management command parser.
 
-            Convert the user's command into JSON.
-
             Return ONLY valid JSON.
 
             Schema:
-
             {
-            "action": "create|read|update|delete|unknown",
-            "confidence": 0.0,
-            "data": {}
+            "action":"create|read|update|delete|unknown",
+            "confidence":0.0,
+            "data":{}
             }
 
             Examples:
 
-            User:
-            add a task buy milk
-
+            Input: add a task buy milk
             Output:
-            {
-            "action":"create",
-            "confidence":0.99,
-            "data":{
-                "title":"buy milk"
-            }
-            }
+            {"action":"create","confidence":0.99,"data":{"title":"buy milk"}}
 
-            User:
-            list all tasks
-
+            Input: list all tasks
             Output:
-            {
-            "action":"read",
-            "confidence":0.99,
-            "data":{}
-            }
+            {"action":"read","confidence":0.99,"data":{}}
 
-            User:
-            change task 2 to buy coffee
-
+            Input: change task 2 to buy coffee
             Output:
-            {
-            "action":"update",
-            "confidence":0.95,
-            "data":{
-                "id":2,
-                "title":"buy coffee"
-            }
-            }
+            {"action":"update","confidence":0.95,"data":{"id":2,"title":"buy coffee"}}
 
-            User:
-            remove task 3
-
+            Input: remove task 3
             Output:
-            {
-            "action":"delete",
-            "confidence":0.99,
-            "data":{
-                "id":3
-            }
-            }
+            {"action":"delete","confidence":0.99,"data":{"id":3}}
 
             Rules:
-
-            1. Return JSON only.
-            2. No markdown.
-            3. No explanation.
-            4. No code fences.
-            5. Always include confidence.
-            6. If unsure, use:
-
-            {
-            "action":"unknown",
-            "confidence":0
-            }
-        `;
+            - JSON only
+            - No markdown
+            - No explanations
+            - No code fences
+            - Always include confidence
+            `;
     }
 
     private extractJson(text: string): unknown | null {
@@ -187,20 +153,10 @@ export class HuggingFaceService {
         } catch { }
 
         try {
-            const fencedMatch = text.match(
-                /```(?:json)?\s*([\s\S]*?)```/i,
-            );
+            const match = text.match(/\{[\s\S]*\}/);
 
-            if (fencedMatch?.[1]) {
-                return JSON.parse(fencedMatch[1]);
-            }
-        } catch { }
-
-        try {
-            const objectMatch = text.match(/\{[\s\S]*\}/);
-
-            if (objectMatch?.[0]) {
-                return JSON.parse(objectMatch[0]);
+            if (match?.[0]) {
+                return JSON.parse(match[0]);
             }
         } catch { }
 
@@ -209,19 +165,19 @@ export class HuggingFaceService {
 
     async healthCheck(): Promise<boolean> {
         try {
-            const response = await this.client.chatCompletion({
+            await this.client.chatCompletion({
                 model: this.model,
-                max_tokens: 5,
-                temperature: 0,
                 messages: [
                     {
                         role: 'user',
                         content: 'ping',
                     },
                 ],
+                temperature: 0,
+                max_tokens: 5,
             });
 
-            return !!response;
+            return true;
         } catch {
             return false;
         }
